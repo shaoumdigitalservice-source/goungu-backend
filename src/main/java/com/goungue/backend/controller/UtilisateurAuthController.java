@@ -2,6 +2,7 @@ package com.goungue.backend.controller;
 
 import com.goungue.backend.config.JwtService;
 import com.goungue.backend.dto.InscriptionRequestDTO;
+import com.goungue.backend.dto.ProfilUpdateRequestDTO;
 import com.goungue.backend.dto.UtilisateurLoginRequestDTO;
 import com.goungue.backend.model.Utilisateur;
 import com.goungue.backend.repository.UtilisateurRepository;
@@ -25,6 +26,26 @@ public class UtilisateurAuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
+    private Utilisateur getUtilisateurConnecte(String authHeader) {
+        String token = authHeader.replace("Bearer ", "");
+        String email = jwtService.extraireEmail(token);
+        return utilisateurRepository.findByEmail(email).orElse(null);
+    }
+
+    private Map<String, Object> versReponse(Utilisateur u, String token) {
+        Map<String, Object> response = new HashMap<>();
+        if (token != null) response.put("token", token);
+        response.put("email", u.getEmail());
+        response.put("prenom", u.getPrenom());
+        response.put("nom", u.getNom());
+        response.put("role", u.getRole());
+        response.put("telephone", u.getTelephone());
+        response.put("ville", u.getVille());
+        response.put("dateNaissance", u.getDateNaissance());
+        response.put("bio", u.getBio());
+        return response;
+    }
+
     @PostMapping("/inscription")
     public ResponseEntity<?> inscription(@Valid @RequestBody InscriptionRequestDTO dto) {
         if (utilisateurRepository.findByEmail(dto.getEmail()).isPresent()) {
@@ -40,14 +61,7 @@ public class UtilisateurAuthController {
         utilisateurRepository.save(utilisateur);
 
         String token = jwtService.genererToken(utilisateur.getEmail());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("token", token);
-        response.put("email", utilisateur.getEmail());
-        response.put("prenom", utilisateur.getPrenom());
-        response.put("nom", utilisateur.getNom());
-        response.put("role", utilisateur.getRole());
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(versReponse(utilisateur, token));
     }
 
     @PostMapping("/login")
@@ -59,31 +73,33 @@ public class UtilisateurAuthController {
         }
 
         String token = jwtService.genererToken(utilisateur.getEmail());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("token", token);
-        response.put("email", utilisateur.getEmail());
-        response.put("prenom", utilisateur.getPrenom());
-        response.put("nom", utilisateur.getNom());
-        response.put("role", utilisateur.getRole());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(versReponse(utilisateur, token));
     }
 
     @GetMapping("/moi")
     public ResponseEntity<?> profil(@RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.replace("Bearer ", "");
-        String email = jwtService.extraireEmail(token);
+        Utilisateur utilisateur = getUtilisateurConnecte(authHeader);
+        if (utilisateur == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
+        }
+        return ResponseEntity.ok(versReponse(utilisateur, null));
+    }
 
-        Utilisateur utilisateur = utilisateurRepository.findByEmail(email).orElse(null);
+    @PutMapping("/moi")
+    public ResponseEntity<?> modifierProfil(@RequestHeader("Authorization") String authHeader, @RequestBody ProfilUpdateRequestDTO dto) {
+        Utilisateur utilisateur = getUtilisateurConnecte(authHeader);
         if (utilisateur == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
         }
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("email", utilisateur.getEmail());
-        response.put("prenom", utilisateur.getPrenom());
-        response.put("nom", utilisateur.getNom());
-        response.put("role", utilisateur.getRole());
-        return ResponseEntity.ok(response);
+        if (dto.getPrenom() != null) utilisateur.setPrenom(dto.getPrenom());
+        if (dto.getNom() != null) utilisateur.setNom(dto.getNom());
+        if (dto.getTelephone() != null) utilisateur.setTelephone(dto.getTelephone());
+        if (dto.getVille() != null) utilisateur.setVille(dto.getVille());
+        if (dto.getDateNaissance() != null) utilisateur.setDateNaissance(dto.getDateNaissance());
+        if (dto.getBio() != null) utilisateur.setBio(dto.getBio());
+
+        utilisateurRepository.save(utilisateur);
+        return ResponseEntity.ok(versReponse(utilisateur, null));
     }
 }

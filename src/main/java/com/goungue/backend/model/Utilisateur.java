@@ -25,5 +25,12 @@ public class Utilisateur {
     private String nom;
 
     @Column(nullable = false)
-    private String role; // jeune, parent, mentor, formateur
+    private String role;
+
+    private String telephone;
+    private String ville;
+    private String dateNaissance;
+
+    @Column(length = 1000)
+    private String bio;
 }
