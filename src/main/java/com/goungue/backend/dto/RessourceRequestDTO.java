@@ -17,4 +17,6 @@ public class RessourceRequestDTO {
     private boolean actif = true;
 
     private Integer ordreAffichage = 0;
+
+    private String categorie;
 }

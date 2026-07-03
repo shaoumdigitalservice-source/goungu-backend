@@ -75,6 +75,7 @@ public class RessourceController {
         ressource.setUrl(dto.getUrl());
         ressource.setActif(dto.isActif());
         ressource.setOrdreAffichage(dto.getOrdreAffichage());
+        ressource.setCategorie(dto.getCategorie());
 
         Ressource saved = ressourceRepository.save(ressource);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -88,6 +89,7 @@ public class RessourceController {
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "actif", defaultValue = "true") boolean actif,
             @RequestParam(value = "ordreAffichage", defaultValue = "0") Integer ordreAffichage,
+            @RequestParam(value = "categorie", required = false) String categorie,
             @RequestParam("fichier") MultipartFile fichier
     ) {
         ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
@@ -117,6 +119,7 @@ public class RessourceController {
             ressource.setNomFichier(nomOriginal);
             ressource.setActif(actif);
             ressource.setOrdreAffichage(ordreAffichage);
+            ressource.setCategorie(categorie);
 
             Ressource saved = ressourceRepository.save(ressource);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -138,6 +141,7 @@ public class RessourceController {
                     r.setDescription(dto.getDescription());
                     r.setActif(dto.isActif());
                     r.setOrdreAffichage(dto.getOrdreAffichage());
+                    r.setCategorie(dto.getCategorie());
                     return ResponseEntity.ok(ressourceRepository.save(r));
                 })
                 .orElse(ResponseEntity.notFound().build());

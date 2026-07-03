@@ -39,6 +39,9 @@ public class Ressource {
     @Column(name = "ordre_affichage")
     private Integer ordreAffichage = 0;
 
+    @Column(name = "categorie")
+    private String categorie; // ex: "parentalite", "general" (null = general)
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }
