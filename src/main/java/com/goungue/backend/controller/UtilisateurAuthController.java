@@ -336,6 +336,7 @@ public class UtilisateurAuthController {
 
         Map<String, Object> reponse = new HashMap<>();
         reponse.put("assigne", true);
+        reponse.put("id", mentor.getId());
         reponse.put("prenom", mentor.getPrenom());
         reponse.put("nom", mentor.getNom());
         reponse.put("email", mentor.getEmail());
