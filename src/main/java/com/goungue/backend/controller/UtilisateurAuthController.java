@@ -8,19 +8,27 @@ import com.goungue.backend.model.Utilisateur;
 import com.goungue.backend.repository.UtilisateurRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/utilisateurs")
 @RequiredArgsConstructor
 @CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class UtilisateurAuthController {
+
+    private static final Logger logger = LoggerFactory.getLogger(UtilisateurAuthController.class);
 
     private final UtilisateurRepository utilisateurRepository;
     private final PasswordEncoder passwordEncoder;
@@ -35,6 +43,7 @@ public class UtilisateurAuthController {
     private Map<String, Object> versReponse(Utilisateur u, String token) {
         Map<String, Object> response = new HashMap<>();
         if (token != null) response.put("token", token);
+        response.put("id", u.getId());
         response.put("email", u.getEmail());
         response.put("prenom", u.getPrenom());
         response.put("nom", u.getNom());
@@ -43,6 +52,8 @@ public class UtilisateurAuthController {
         response.put("ville", u.getVille());
         response.put("dateNaissance", u.getDateNaissance());
         response.put("bio", u.getBio());
+        response.put("mentorId", u.getMentorId());
+        response.put("parentId", u.getParentId());
         return response;
     }
 
@@ -101,5 +112,255 @@ public class UtilisateurAuthController {
 
         utilisateurRepository.save(utilisateur);
         return ResponseEntity.ok(versReponse(utilisateur, null));
+    }
+
+    // Étape 1 : demande de réinitialisation - génère un code et le loggue (mode test, pas d'email réel)
+    @PostMapping("/mot-de-passe-oublie")
+    public ResponseEntity<?> motDePasseOublie(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        Utilisateur utilisateur = utilisateurRepository.findByEmail(email).orElse(null);
+
+        String messageGenerique = "Si un compte existe avec cet email, un lien de réinitialisation a été généré.";
+
+        if (utilisateur == null) {
+            return ResponseEntity.ok(Map.of("message", messageGenerique));
+        }
+
+        String code = UUID.randomUUID().toString();
+        utilisateur.setResetToken(code);
+        utilisateur.setResetTokenExpiration(LocalDateTime.now().plusHours(1));
+        utilisateurRepository.save(utilisateur);
+
+        String lienReset = "http://localhost:8080/reinitialiser-mot-de-passe?token=" + code;
+
+        logger.info("=====================================================");
+        logger.info("LIEN DE RÉINITIALISATION (mode test, pas d'email envoyé)");
+        logger.info("Pour : {}", email);
+        logger.info("Lien : {}", lienReset);
+        logger.info("Valable jusqu'à : {}", utilisateur.getResetTokenExpiration());
+        logger.info("=====================================================");
+
+        return ResponseEntity.ok(Map.of("message", messageGenerique));
+    }
+
+    // Étape 2 : vérifie le code et change le mot de passe
+    @PostMapping("/reinitialiser-mot-de-passe")
+    public ResponseEntity<?> reinitialiserMotDePasse(@RequestBody Map<String, String> body) {
+        String token = body.get("token");
+        String nouveauMotDePasse = body.get("nouveauMotDePasse");
+
+        if (token == null || nouveauMotDePasse == null || nouveauMotDePasse.length() < 6) {
+            return ResponseEntity.badRequest().body("Le nouveau mot de passe doit contenir au moins 6 caractères");
+        }
+
+        Utilisateur utilisateur = utilisateurRepository.findByResetToken(token).orElse(null);
+
+        if (utilisateur == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Lien de réinitialisation invalide");
+        }
+
+        if (utilisateur.getResetTokenExpiration() == null || utilisateur.getResetTokenExpiration().isBefore(LocalDateTime.now())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Lien de réinitialisation expiré, veuillez refaire une demande");
+        }
+
+        utilisateur.setMotDePasse(passwordEncoder.encode(nouveauMotDePasse));
+        utilisateur.setResetToken(null);
+        utilisateur.setResetTokenExpiration(null);
+        utilisateurRepository.save(utilisateur);
+
+        return ResponseEntity.ok(Map.of("message", "Mot de passe réinitialisé avec succès"));
+    }
+
+    // ===================== ROUTES ADMIN (gestion des utilisateurs) =====================
+
+    private ResponseEntity<?> verifierEstAdmin(String authHeader) {
+        Utilisateur appelant = getUtilisateurConnecte(authHeader);
+        if (appelant == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        if (!"admin".equals(appelant.getRole())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé aux administrateurs");
+        }
+        return null;
+    }
+
+    @GetMapping
+    public ResponseEntity<?> listerUtilisateurs(@RequestHeader("Authorization") String authHeader) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
+        List<Map<String, Object>> liste = utilisateurRepository.findAll().stream()
+                .map(u -> versReponse(u, null))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(liste);
+    }
+
+    @PutMapping("/{id}/role")
+    public ResponseEntity<?> changerRole(@RequestHeader("Authorization") String authHeader, @PathVariable Long id, @RequestBody Map<String, String> body) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
+        String nouveauRole = body.get("role");
+        List<String> rolesValides = List.of("jeune", "parent", "mentor", "formateur", "admin");
+        if (nouveauRole == null || !rolesValides.contains(nouveauRole)) {
+            return ResponseEntity.badRequest().body("Rôle invalide");
+        }
+
+        Utilisateur cible = utilisateurRepository.findById(id).orElse(null);
+        if (cible == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
+        }
+
+        cible.setRole(nouveauRole);
+        utilisateurRepository.save(cible);
+
+        return ResponseEntity.ok(versReponse(cible, null));
+    }
+
+    @GetMapping("/stats-roles")
+    public ResponseEntity<?> statsParRole(@RequestHeader("Authorization") String authHeader) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
+        Map<String, Long> stats = utilisateurRepository.findAll().stream()
+                .collect(Collectors.groupingBy(Utilisateur::getRole, Collectors.counting()));
+
+        return ResponseEntity.ok(stats);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> supprimerUtilisateur(@RequestHeader("Authorization") String authHeader, @PathVariable Long id) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
+        Utilisateur appelant = getUtilisateurConnecte(authHeader);
+        if (appelant.getId().equals(id)) {
+            return ResponseEntity.badRequest().body("Vous ne pouvez pas supprimer votre propre compte");
+        }
+
+        if (!utilisateurRepository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
+        }
+
+        utilisateurRepository.deleteById(id);
+        return ResponseEntity.ok(Map.of("message", "Utilisateur supprimé"));
+    }
+
+    // ===================== MENTOR (lien jeune <-> mentor) =====================
+
+    // PUT /api/utilisateurs/{id}/mentor -> assigne un mentor à un jeune (admin uniquement)
+    @PutMapping("/{id}/mentor")
+    public ResponseEntity<?> assignerMentor(@RequestHeader("Authorization") String authHeader, @PathVariable Long id, @RequestBody Map<String, Long> body) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
+        Long mentorId = body.get("mentorId");
+
+        Utilisateur jeune = utilisateurRepository.findById(id).orElse(null);
+        if (jeune == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
+        }
+        if (!"jeune".equals(jeune.getRole())) {
+            return ResponseEntity.badRequest().body("Cet utilisateur n'a pas le rôle jeune");
+        }
+
+        if (mentorId != null) {
+            Utilisateur mentor = utilisateurRepository.findById(mentorId).orElse(null);
+            if (mentor == null || !"mentor".equals(mentor.getRole())) {
+                return ResponseEntity.badRequest().body("Mentor invalide");
+            }
+        }
+
+        jeune.setMentorId(mentorId);
+        utilisateurRepository.save(jeune);
+
+        return ResponseEntity.ok(versReponse(jeune, null));
+    }
+
+
+    // ===================== PARENT (lien jeune <-> parent) =====================
+    // PUT /api/utilisateurs/{id}/parent -> associe un parent à un jeune (admin uniquement)
+    @PutMapping("/{id}/parent")
+    public ResponseEntity<?> assignerParent(@RequestHeader("Authorization") String authHeader, @PathVariable Long id, @RequestBody Map<String, Long> body) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+        Long parentId = body.get("parentId");
+        Utilisateur jeune = utilisateurRepository.findById(id).orElse(null);
+        if (jeune == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
+        }
+        if (!"jeune".equals(jeune.getRole())) {
+            return ResponseEntity.badRequest().body("Cet utilisateur n'a pas le rôle jeune");
+        }
+        if (parentId != null) {
+            Utilisateur parent = utilisateurRepository.findById(parentId).orElse(null);
+            if (parent == null || !"parent".equals(parent.getRole())) {
+                return ResponseEntity.badRequest().body("Parent invalide");
+            }
+        }
+        jeune.setParentId(parentId);
+        utilisateurRepository.save(jeune);
+        return ResponseEntity.ok(versReponse(jeune, null));
+    }
+
+    // GET /api/utilisateurs/mon-enfant -> le parent connecté récupère les infos de son/ses jeune(s)
+    @GetMapping("/mon-enfant")
+    public ResponseEntity<?> monEnfant(@RequestHeader("Authorization") String authHeader) {
+        Utilisateur parent = getUtilisateurConnecte(authHeader);
+        if (parent == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        List<Map<String, Object>> enfants = utilisateurRepository.findAll().stream()
+                .filter(u -> parent.getId().equals(u.getParentId()))
+                .map(u -> versReponse(u, null))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(enfants);
+    }
+    // GET /api/utilisateurs/mon-mentor -> le jeune connecté récupère les infos de son mentor
+    @GetMapping("/mon-mentor")
+    public ResponseEntity<?> monMentor(@RequestHeader("Authorization") String authHeader) {
+        Utilisateur jeune = getUtilisateurConnecte(authHeader);
+        if (jeune == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+
+        if (jeune.getMentorId() == null) {
+            return ResponseEntity.ok(Map.of("assigne", false));
+        }
+
+        Utilisateur mentor = utilisateurRepository.findById(jeune.getMentorId()).orElse(null);
+        if (mentor == null) {
+            return ResponseEntity.ok(Map.of("assigne", false));
+        }
+
+        Map<String, Object> reponse = new HashMap<>();
+        reponse.put("assigne", true);
+        reponse.put("prenom", mentor.getPrenom());
+        reponse.put("nom", mentor.getNom());
+        reponse.put("email", mentor.getEmail());
+        reponse.put("telephone", mentor.getTelephone());
+        reponse.put("bio", mentor.getBio());
+
+        return ResponseEntity.ok(reponse);
+    }
+
+    // GET /api/utilisateurs/mes-jeunes -> le mentor connecté récupère la liste de ses jeunes assignés
+    @GetMapping("/mes-jeunes")
+    public ResponseEntity<?> mesJeunes(@RequestHeader("Authorization") String authHeader) {
+        Utilisateur mentor = getUtilisateurConnecte(authHeader);
+        if (mentor == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        if (!"mentor".equals(mentor.getRole()) && !"admin".equals(mentor.getRole())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé aux mentors");
+        }
+
+        List<Map<String, Object>> jeunes = utilisateurRepository.findAll().stream()
+                .filter(u -> mentor.getId().equals(u.getMentorId()))
+                .map(u -> versReponse(u, null))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(jeunes);
     }
 }

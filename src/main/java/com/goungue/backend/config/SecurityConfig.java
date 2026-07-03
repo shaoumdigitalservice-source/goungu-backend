@@ -21,7 +21,6 @@ import java.util.List;
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
-
     private final JwtAuthFilter jwtAuthFilter;
 
     @Bean
@@ -36,7 +35,6 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
-
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -53,6 +51,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/utilisateurs/inscription").permitAll()
                 .requestMatchers("/api/utilisateurs/login").permitAll()
+                .requestMatchers("/api/utilisateurs/mot-de-passe-oublie").permitAll()
+                .requestMatchers("/api/utilisateurs/reinitialiser-mot-de-passe").permitAll()
                 .requestMatchers("/api/setup/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/candidatures").permitAll()
@@ -62,6 +62,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/articles/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/programmes").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/programmes/slug/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/ressources").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/evenements").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

@@ -1,8 +1,11 @@
 package com.goungue.backend.controller;
 
+import com.goungue.backend.config.JwtService;
 import com.goungue.backend.dto.ProgrammeRequestDTO;
 import com.goungue.backend.model.Programme;
+import com.goungue.backend.model.Utilisateur;
 import com.goungue.backend.repository.ProgrammeRepository;
+import com.goungue.backend.repository.UtilisateurRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +21,24 @@ import java.util.List;
 public class ProgrammeController {
 
     private final ProgrammeRepository programmeRepository;
+    private final UtilisateurRepository utilisateurRepository;
+    private final JwtService jwtService;
+
+    private ResponseEntity<?> verifierEstAdmin(String authHeader) {
+        if (authHeader == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        String token = authHeader.replace("Bearer ", "");
+        String email = jwtService.extraireEmail(token);
+        Utilisateur appelant = utilisateurRepository.findByEmail(email).orElse(null);
+        if (appelant == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        if (!"admin".equals(appelant.getRole())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé aux administrateurs");
+        }
+        return null;
+    }
 
     // GET /api/programmes -> liste publique (actifs uniquement, triés)
     @GetMapping
@@ -25,13 +46,15 @@ public class ProgrammeController {
         return programmeRepository.findByActifTrueOrderByOrdreAffichageAsc();
     }
 
-    // GET /api/programmes/admin -> liste complète pour l'admin
+    // GET /api/programmes/admin -> liste complète (admin uniquement)
     @GetMapping("/admin")
-    public List<Programme> listeComplete() {
-        return programmeRepository.findAll();
+    public ResponseEntity<?> listeComplete(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+        return ResponseEntity.ok(programmeRepository.findAll());
     }
 
-    // GET /api/programmes/slug/{slug} -> détail par slug (pour les pages publiques)
+    // GET /api/programmes/slug/{slug} -> détail par slug (public)
     @GetMapping("/slug/{slug}")
     public ResponseEntity<Programme> parSlug(@PathVariable String slug) {
         return programmeRepository.findBySlug(slug)
@@ -39,9 +62,12 @@ public class ProgrammeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // POST /api/programmes -> créer (admin)
+    // POST /api/programmes -> créer (admin uniquement)
     @PostMapping
-    public ResponseEntity<Programme> creer(@Valid @RequestBody ProgrammeRequestDTO dto) {
+    public ResponseEntity<?> creer(@RequestHeader(value = "Authorization", required = false) String authHeader, @Valid @RequestBody ProgrammeRequestDTO dto) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
         Programme programme = new Programme();
         programme.setTitre(dto.getTitre());
         programme.setTag(dto.getTag());
@@ -55,9 +81,12 @@ public class ProgrammeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
-    // PUT /api/programmes/{id} -> modifier (admin)
+    // PUT /api/programmes/{id} -> modifier (admin uniquement)
     @PutMapping("/{id}")
-    public ResponseEntity<Programme> modifier(@PathVariable Long id, @Valid @RequestBody ProgrammeRequestDTO dto) {
+    public ResponseEntity<?> modifier(@RequestHeader(value = "Authorization", required = false) String authHeader, @PathVariable Long id, @Valid @RequestBody ProgrammeRequestDTO dto) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
         return programmeRepository.findById(id)
                 .map(p -> {
                     p.setTitre(dto.getTitre());
@@ -72,9 +101,12 @@ public class ProgrammeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // DELETE /api/programmes/{id} -> supprimer (admin)
+    // DELETE /api/programmes/{id} -> supprimer (admin uniquement)
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> supprimer(@PathVariable Long id) {
+    public ResponseEntity<?> supprimer(@RequestHeader(value = "Authorization", required = false) String authHeader, @PathVariable Long id) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
         if (!programmeRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }

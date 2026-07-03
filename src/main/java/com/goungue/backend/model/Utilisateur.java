@@ -7,7 +7,6 @@ import lombok.Data;
 @Table(name = "utilisateurs")
 @Data
 public class Utilisateur {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -33,4 +32,14 @@ public class Utilisateur {
 
     @Column(length = 1000)
     private String bio;
+
+    // Champs pour la réinitialisation de mot de passe
+    private String resetToken;
+    private java.time.LocalDateTime resetTokenExpiration;
+
+    // Pour un utilisateur de rôle "jeune" : id du mentor qui lui est assigné (nullable)
+    private Long mentorId;
+
+    // Pour un utilisateur de rôle "jeune" : id du parent qui lui est associé (nullable)
+    private Long parentId;
 }
