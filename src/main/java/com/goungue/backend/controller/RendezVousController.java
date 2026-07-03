@@ -54,7 +54,6 @@ public class RendezVousController {
         return map;
     }
 
-    // GET /api/rendez-vous/mentor -> tous les rendez-vous du mentor connecté
     @GetMapping("/mentor")
     public ResponseEntity<?> mesRendezVousMentor(@RequestHeader("Authorization") String authHeader) {
         Utilisateur mentor = getUtilisateurConnecte(authHeader);
@@ -73,7 +72,6 @@ public class RendezVousController {
         return ResponseEntity.ok(liste);
     }
 
-    // GET /api/rendez-vous/jeune -> tous les rendez-vous du jeune connecté
     @GetMapping("/jeune")
     public ResponseEntity<?> mesRendezVousJeune(@RequestHeader("Authorization") String authHeader) {
         Utilisateur jeune = getUtilisateurConnecte(authHeader);
@@ -89,7 +87,31 @@ public class RendezVousController {
         return ResponseEntity.ok(liste);
     }
 
-    // POST /api/rendez-vous -> le mentor crée un rendez-vous avec un de ses jeunes
+    // GET /api/rendez-vous/parent -> le parent connecté voit les rendez-vous de son/ses enfant(s)
+    @GetMapping("/parent")
+    public ResponseEntity<?> mesRendezVousParent(@RequestHeader("Authorization") String authHeader) {
+        Utilisateur parent = getUtilisateurConnecte(authHeader);
+        if (parent == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        if (!"parent".equals(parent.getRole()) && !"admin".equals(parent.getRole())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé aux parents");
+        }
+
+        List<Long> idsEnfants = utilisateurRepository.findAll().stream()
+                .filter(u -> parent.getId().equals(u.getParentId()))
+                .map(Utilisateur::getId)
+                .collect(Collectors.toList());
+
+        List<Map<String, Object>> liste = rendezVousRepository.findAll().stream()
+                .filter(r -> idsEnfants.contains(r.getJeuneId()))
+                .sorted((a, b) -> a.getDateHeure().compareTo(b.getDateHeure()))
+                .map(this::versReponse)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(liste);
+    }
+
     @PostMapping
     public ResponseEntity<?> creer(@RequestHeader("Authorization") String authHeader, @RequestBody Map<String, String> body) {
         Utilisateur mentor = getUtilisateurConnecte(authHeader);
@@ -141,7 +163,6 @@ public class RendezVousController {
         return ResponseEntity.status(HttpStatus.CREATED).body(versReponse(rdv));
     }
 
-    // PUT /api/rendez-vous/{id}/statut -> changer le statut (mentor propriétaire uniquement)
     @PutMapping("/{id}/statut")
     public ResponseEntity<?> changerStatut(@RequestHeader("Authorization") String authHeader, @PathVariable Long id, @RequestBody Map<String, String> body) {
         Utilisateur mentor = getUtilisateurConnecte(authHeader);
@@ -169,7 +190,6 @@ public class RendezVousController {
         return ResponseEntity.ok(versReponse(rdv));
     }
 
-    // DELETE /api/rendez-vous/{id} -> supprimer (mentor propriétaire uniquement)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> supprimer(@RequestHeader("Authorization") String authHeader, @PathVariable Long id) {
         Utilisateur mentor = getUtilisateurConnecte(authHeader);
