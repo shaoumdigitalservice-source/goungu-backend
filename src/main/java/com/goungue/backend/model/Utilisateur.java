@@ -42,4 +42,6 @@ public class Utilisateur {
 
     // Pour un utilisateur de rôle "jeune" : id du parent qui lui est associé (nullable)
     private Long parentId;
+    // Date de création du compte (utilisée notamment pour la frise "Mon parcours")
+    private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
 }

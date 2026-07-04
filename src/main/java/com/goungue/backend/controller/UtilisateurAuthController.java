@@ -6,6 +6,8 @@ import com.goungue.backend.dto.ProfilUpdateRequestDTO;
 import com.goungue.backend.dto.UtilisateurLoginRequestDTO;
 import com.goungue.backend.model.Utilisateur;
 import com.goungue.backend.repository.UtilisateurRepository;
+import com.goungue.backend.repository.RendezVousRepository;
+import com.goungue.backend.model.RendezVous;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -33,6 +35,7 @@ public class UtilisateurAuthController {
     private final UtilisateurRepository utilisateurRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RendezVousRepository rendezVousRepository;
 
     private Utilisateur getUtilisateurConnecte(String authHeader) {
         String token = authHeader.replace("Bearer ", "");
@@ -216,6 +219,43 @@ public class UtilisateurAuthController {
         utilisateurRepository.save(cible);
 
         return ResponseEntity.ok(versReponse(cible, null));
+    }
+
+    // GET /api/utilisateurs/mon-parcours -> frise chronologique du jeune connecté
+    @GetMapping("/mon-parcours")
+    public ResponseEntity<?> monParcours(@RequestHeader("Authorization") String authHeader) {
+        Utilisateur jeune = getUtilisateurConnecte(authHeader);
+        if (jeune == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+
+        List<Map<String, Object>> evenements = new java.util.ArrayList<>();
+
+        if (jeune.getCreatedAt() != null) {
+            Map<String, Object> inscription = new HashMap<>();
+            inscription.put("type", "INSCRIPTION");
+            inscription.put("titre", "Inscription sur la plateforme Goungué");
+            inscription.put("date", jeune.getCreatedAt());
+            evenements.add(inscription);
+        }
+
+        List<RendezVous> rdvsTermines = rendezVousRepository.findByJeuneId(jeune.getId()).stream()
+                .filter(r -> "TERMINE".equals(r.getStatut()))
+                .toList();
+
+        for (RendezVous r : rdvsTermines) {
+            Map<String, Object> etape = new HashMap<>();
+            etape.put("type", "RENDEZ_VOUS");
+            etape.put("titre", r.getSujet());
+            etape.put("date", r.getDateHeure());
+            if (r.getNotes() != null) etape.put("description", r.getNotes());
+            evenements.add(etape);
+        }
+
+        evenements.sort((a, b) -> ((java.time.LocalDateTime) a.get("date"))
+                .compareTo((java.time.LocalDateTime) b.get("date")));
+
+        return ResponseEntity.ok(evenements);
     }
 
     @GetMapping("/stats-roles")
