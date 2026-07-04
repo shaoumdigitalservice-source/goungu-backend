@@ -2,8 +2,10 @@ package com.goungue.backend.controller;
 
 import com.goungue.backend.config.JwtService;
 import com.goungue.backend.dto.ProgrammeRequestDTO;
+import com.goungue.backend.model.Admin;
 import com.goungue.backend.model.Programme;
 import com.goungue.backend.model.Utilisateur;
+import com.goungue.backend.repository.AdminRepository;
 import com.goungue.backend.repository.ProgrammeRepository;
 import com.goungue.backend.repository.UtilisateurRepository;
 import jakarta.validation.Valid;
@@ -22,6 +24,7 @@ public class ProgrammeController {
 
     private final ProgrammeRepository programmeRepository;
     private final UtilisateurRepository utilisateurRepository;
+    private final AdminRepository adminRepository;
     private final JwtService jwtService;
 
     private ResponseEntity<?> verifierEstAdmin(String authHeader) {
@@ -30,6 +33,12 @@ public class ProgrammeController {
         }
         String token = authHeader.replace("Bearer ", "");
         String email = jwtService.extraireEmail(token);
+
+        Admin admin = adminRepository.findByEmail(email).orElse(null);
+        if (admin != null) {
+            return null;
+        }
+
         Utilisateur appelant = utilisateurRepository.findByEmail(email).orElse(null);
         if (appelant == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
