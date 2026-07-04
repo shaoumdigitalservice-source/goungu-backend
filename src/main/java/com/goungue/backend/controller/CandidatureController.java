@@ -2,8 +2,10 @@ package com.goungue.backend.controller;
 
 import com.goungue.backend.config.JwtService;
 import com.goungue.backend.dto.CandidatureRequestDTO;
+import com.goungue.backend.model.Admin;
 import com.goungue.backend.model.Candidature;
 import com.goungue.backend.model.Utilisateur;
+import com.goungue.backend.repository.AdminRepository;
 import com.goungue.backend.repository.CandidatureRepository;
 import com.goungue.backend.repository.UtilisateurRepository;
 import jakarta.validation.Valid;
@@ -22,14 +24,22 @@ public class CandidatureController {
 
     private final CandidatureRepository candidatureRepository;
     private final UtilisateurRepository utilisateurRepository;
+    private final AdminRepository adminRepository;
     private final JwtService jwtService;
 
+    // Accepte un token venant SOIT de la table Admin, SOIT d'un Utilisateur avec role = admin
     private ResponseEntity<?> verifierEstAdmin(String authHeader) {
         if (authHeader == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
         }
         String token = authHeader.replace("Bearer ", "");
         String email = jwtService.extraireEmail(token);
+
+        Admin admin = adminRepository.findByEmail(email).orElse(null);
+        if (admin != null) {
+            return null; // C'est un admin de la table Admin, accès autorisé
+        }
+
         Utilisateur appelant = utilisateurRepository.findByEmail(email).orElse(null);
         if (appelant == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
