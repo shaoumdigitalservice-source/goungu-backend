@@ -4,7 +4,9 @@ import com.goungue.backend.config.JwtService;
 import com.goungue.backend.dto.InscriptionRequestDTO;
 import com.goungue.backend.dto.ProfilUpdateRequestDTO;
 import com.goungue.backend.dto.UtilisateurLoginRequestDTO;
+import com.goungue.backend.model.Admin;
 import com.goungue.backend.model.Utilisateur;
+import com.goungue.backend.repository.AdminRepository;
 import com.goungue.backend.repository.UtilisateurRepository;
 import com.goungue.backend.repository.RendezVousRepository;
 import com.goungue.backend.model.RendezVous;
@@ -32,6 +34,7 @@ public class UtilisateurAuthController {
     private static final Logger logger = LoggerFactory.getLogger(UtilisateurAuthController.class);
 
     private final UtilisateurRepository utilisateurRepository;
+    private final AdminRepository adminRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RendezVousRepository rendezVousRepository;
@@ -184,8 +187,23 @@ public class UtilisateurAuthController {
 
     // ===================== ROUTES ADMIN (gestion des utilisateurs) =====================
 
+    // Accepte un token venant SOIT de la table Admin, SOIT d'un Utilisateur avec role = admin.
+    // Sans le premier cas, aucun compte ne peut jamais devenir le premier admin Utilisateur :
+    // /api/setup/create-admin ne crée qu'une ligne Admin, et un Utilisateur ne peut pas
+    // s'auto-attribuer le rôle admin à l'inscription (voir ROLES_AUTO_ATTRIBUABLES).
     private ResponseEntity<?> verifierEstAdmin(String authHeader) {
-        Utilisateur appelant = getUtilisateurConnecte(authHeader);
+        if (authHeader == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        String token = authHeader.replace("Bearer ", "");
+        String email = jwtService.extraireEmail(token);
+
+        Admin admin = adminRepository.findByEmail(email).orElse(null);
+        if (admin != null) {
+            return null;
+        }
+
+        Utilisateur appelant = utilisateurRepository.findByEmail(email).orElse(null);
         if (appelant == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
         }
@@ -282,8 +300,10 @@ public class UtilisateurAuthController {
         ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
         if (erreur != null) return erreur;
 
+        // null si l'appelant est un admin de la table Admin (pas de ligne Utilisateur correspondante) :
+        // dans ce cas il ne peut par construction pas correspondre à l'id ciblé.
         Utilisateur appelant = getUtilisateurConnecte(authHeader);
-        if (appelant.getId().equals(id)) {
+        if (appelant != null && appelant.getId().equals(id)) {
             return ResponseEntity.badRequest().body("Vous ne pouvez pas supprimer votre propre compte");
         }
 
