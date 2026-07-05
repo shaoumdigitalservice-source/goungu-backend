@@ -18,7 +18,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/images")
@@ -31,6 +33,8 @@ public class ImageSiteController {
     private final JwtService jwtService;
 
     private static final String UPLOAD_DIR = "uploads";
+    private static final Set<String> EXTENSIONS_AUTORISEES = Set.of(".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg");
+    private static final Pattern CLE_VALIDE = Pattern.compile("^[a-zA-Z0-9_-]+$");
 
     // Accepte un token venant SOIT de la table Admin, SOIT d'un Utilisateur avec role = admin
     private ResponseEntity<?> verifierEstAdmin(String authHeader) {
@@ -65,6 +69,18 @@ public class ImageSiteController {
         ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
         if (erreur != null) return erreur;
 
+        if (cle == null || !CLE_VALIDE.matcher(cle).matches()) {
+            return ResponseEntity.badRequest().body("Clé invalide (lettres, chiffres, - et _ uniquement)");
+        }
+
+        String nomOriginal = fichier.getOriginalFilename();
+        String extension = (nomOriginal != null && nomOriginal.contains("."))
+                ? nomOriginal.substring(nomOriginal.lastIndexOf(".")).toLowerCase()
+                : "";
+        if (!EXTENSIONS_AUTORISEES.contains(extension)) {
+            return ResponseEntity.badRequest().body("Format d'image non autorisé (jpg, jpeg, png, webp, gif, svg uniquement)");
+        }
+
         try {
             // Crée le dossier uploads s'il n'existe pas
             Path dossier = Paths.get(UPLOAD_DIR);
@@ -72,12 +88,6 @@ public class ImageSiteController {
                 Files.createDirectories(dossier);
             }
 
-            // Génère un nom de fichier unique
-            String extension = "";
-            String nomOriginal = fichier.getOriginalFilename();
-            if (nomOriginal != null && nomOriginal.contains(".")) {
-                extension = nomOriginal.substring(nomOriginal.lastIndexOf("."));
-            }
             String nomFichier = cle + "_" + UUID.randomUUID() + extension;
 
             // Sauvegarde le fichier sur le disque

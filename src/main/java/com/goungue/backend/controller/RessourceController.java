@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -30,6 +31,10 @@ public class RessourceController {
     private final JwtService jwtService;
 
     private static final String UPLOAD_DIR = "uploads";
+    private static final Set<String> EXTENSIONS_AUTORISEES = Set.of(
+            ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx",
+            ".jpg", ".jpeg", ".png", ".webp", ".mp4"
+    );
 
     private ResponseEntity<?> verifierEstAdmin(String authHeader) {
         if (authHeader == null) {
@@ -94,17 +99,20 @@ public class RessourceController {
         ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
         if (erreur != null) return erreur;
 
+        String nomOriginal = fichier.getOriginalFilename();
+        String extension = (nomOriginal != null && nomOriginal.contains("."))
+                ? nomOriginal.substring(nomOriginal.lastIndexOf(".")).toLowerCase()
+                : "";
+        if (!EXTENSIONS_AUTORISEES.contains(extension)) {
+            return ResponseEntity.badRequest().body("Format de fichier non autorisé (pdf, doc(x), ppt(x), xls(x), jpg, jpeg, png, webp, mp4 uniquement)");
+        }
+
         try {
             Path dossier = Paths.get(UPLOAD_DIR);
             if (!Files.exists(dossier)) {
                 Files.createDirectories(dossier);
             }
 
-            String extension = "";
-            String nomOriginal = fichier.getOriginalFilename();
-            if (nomOriginal != null && nomOriginal.contains(".")) {
-                extension = nomOriginal.substring(nomOriginal.lastIndexOf("."));
-            }
             String nomFichier = "ressource_" + UUID.randomUUID() + extension;
 
             Path chemin = dossier.resolve(nomFichier);
