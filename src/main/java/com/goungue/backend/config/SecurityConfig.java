@@ -1,6 +1,7 @@
 package com.goungue.backend.config;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -23,6 +24,11 @@ import java.util.List;
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
 
+    // Liste d'origines autorisées, séparées par des virgules (variable d'environnement CORS_ALLOWED_ORIGINS
+    // en production). Seul et unique endroit à modifier pour ajouter le domaine du VPS.
+    @Value("${cors.allowed-origins}")
+    private String corsAllowedOrigins;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -31,7 +37,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:8080", "http://localhost:5173"));
+        configuration.setAllowedOrigins(List.of(corsAllowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -59,6 +65,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/images/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/articles").permitAll()
+                // Doit rester avant la règle générique ci-dessous : sans ça, "/*" matche aussi "/admin"
+                // et expose la liste complète (brouillons inclus) sans authentification.
+                .requestMatchers(HttpMethod.GET, "/api/articles/admin").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/articles/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/programmes").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/programmes/slug/*").permitAll()

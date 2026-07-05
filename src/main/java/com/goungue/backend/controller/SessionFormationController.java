@@ -19,7 +19,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/sessions-formation")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class SessionFormationController {
 
     private final SessionFormationRepository sessionFormationRepository;

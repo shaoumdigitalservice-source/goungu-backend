@@ -16,7 +16,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/passeport")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class PasseportController {
 
     private final PasseportEntreeRepository passeportEntreeRepository;

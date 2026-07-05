@@ -19,7 +19,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/programmes")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class ProgrammeController {
 
     private final ProgrammeRepository programmeRepository;

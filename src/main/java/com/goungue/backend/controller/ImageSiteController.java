@@ -1,7 +1,12 @@
 package com.goungue.backend.controller;
 
+import com.goungue.backend.config.JwtService;
+import com.goungue.backend.model.Admin;
 import com.goungue.backend.model.ImageSite;
+import com.goungue.backend.model.Utilisateur;
+import com.goungue.backend.repository.AdminRepository;
 import com.goungue.backend.repository.ImageSiteRepository;
+import com.goungue.backend.repository.UtilisateurRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,19 +23,48 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/images")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class ImageSiteController {
 
     private final ImageSiteRepository imageSiteRepository;
+    private final UtilisateurRepository utilisateurRepository;
+    private final AdminRepository adminRepository;
+    private final JwtService jwtService;
 
     private static final String UPLOAD_DIR = "uploads";
 
-    // POST /api/images -> upload ou remplace une image pour une clé donnée
+    // Accepte un token venant SOIT de la table Admin, SOIT d'un Utilisateur avec role = admin
+    private ResponseEntity<?> verifierEstAdmin(String authHeader) {
+        if (authHeader == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        String token = authHeader.replace("Bearer ", "");
+        String email = jwtService.extraireEmail(token);
+
+        Admin admin = adminRepository.findByEmail(email).orElse(null);
+        if (admin != null) {
+            return null;
+        }
+
+        Utilisateur appelant = utilisateurRepository.findByEmail(email).orElse(null);
+        if (appelant == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Non authentifié");
+        }
+        if (!"admin".equals(appelant.getRole())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Accès réservé aux administrateurs");
+        }
+        return null;
+    }
+
+    // POST /api/images -> upload ou remplace une image pour une clé donnée (admin uniquement)
     @PostMapping
     public ResponseEntity<?> uploadImage(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestParam("cle") String cle,
             @RequestParam("fichier") MultipartFile fichier
     ) {
+        ResponseEntity<?> erreur = verifierEstAdmin(authHeader);
+        if (erreur != null) return erreur;
+
         try {
             // Crée le dossier uploads s'il n'existe pas
             Path dossier = Paths.get(UPLOAD_DIR);

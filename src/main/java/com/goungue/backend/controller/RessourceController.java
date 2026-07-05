@@ -23,7 +23,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/ressources")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class RessourceController {
 
     private final RessourceRepository ressourceRepository;

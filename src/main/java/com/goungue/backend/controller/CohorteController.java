@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/cohortes")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:5173"})
 public class CohorteController {
 
     private final CohorteRepository cohorteRepository;
