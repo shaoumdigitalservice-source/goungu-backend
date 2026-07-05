@@ -59,8 +59,17 @@ public class UtilisateurAuthController {
         return response;
     }
 
+    // Rôles qu'un compte peut s'auto-attribuer à l'inscription : "admin" en est
+    // volontairement exclu, un admin ne peut être créé que via /api/setup/create-admin
+    // ou promu par un autre admin via PUT /api/utilisateurs/{id}/role.
+    private static final List<String> ROLES_AUTO_ATTRIBUABLES = List.of("jeune", "parent", "mentor", "formateur");
+
     @PostMapping("/inscription")
     public ResponseEntity<?> inscription(@Valid @RequestBody InscriptionRequestDTO dto) {
+        if (!ROLES_AUTO_ATTRIBUABLES.contains(dto.getRole())) {
+            return ResponseEntity.badRequest().body("Rôle invalide");
+        }
+
         if (utilisateurRepository.findByEmail(dto.getEmail()).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body("Un compte existe déjà avec cet email");
         }
