@@ -1,0 +1,8 @@
+# Chargé automatiquement par "docker compose up" en local (jamais sur le VPS,
+# où le déploiement précise explicitement -f docker-compose.yml -f docker-compose.prod.yml).
+# Sert uniquement à exposer l'app directement sur le port 8082 pour tester en local
+# sans passer par un reverse proxy.
+services:
+  app:
+    ports:
+      - "8082:8082"

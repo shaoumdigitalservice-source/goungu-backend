@@ -1,0 +1,25 @@
+# À utiliser uniquement sur le VPS, en plus du fichier de base :
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Ajoute Caddy comme reverse proxy avec HTTPS automatique (Let's Encrypt).
+# L'app n'est volontairement PAS publiée sur l'hôte ici : seul Caddy expose 80/443,
+# tout le trafic vers l'app passe par lui.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
