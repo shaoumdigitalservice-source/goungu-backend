@@ -1,3 +1,14 @@
+# Un seul domaine : le frontend est servi à la racine, l'API et les fichiers
+# uploadés sont proxifiés par chemin vers le backend. Pas de CORS à gérer en
+# production puisque tout est servi depuis la même origine.
 {$DOMAIN} {
-	reverse_proxy app:8082
+	handle /api/* {
+		reverse_proxy app:8082
+	}
+	handle /uploads/* {
+		reverse_proxy app:8082
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
 }

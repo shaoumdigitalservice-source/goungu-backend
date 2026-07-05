@@ -1,11 +1,19 @@
-# Déploiement — goungue-backend sur un VPS
+# Déploiement — goungué (backend + frontend) sur un VPS
 
-Ce guide part d'un VPS vierge (Ubuntu/Debian) jusqu'à l'API accessible en HTTPS sur ton domaine.
+Ce guide part d'un VPS vierge (Ubuntu/Debian) jusqu'au site complet accessible en HTTPS
+sur ton domaine. Architecture mono-domaine : un seul Caddy sert le frontend à la racine
+et proxifie `/api` et `/uploads` vers le backend (voir `Caddyfile`) — pas de CORS à
+gérer en production puisque tout est servi depuis la même origine.
 
 ## 0. Prérequis
 
 - Un VPS avec un accès SSH (root ou sudo).
-- Un nom de domaine (ou sous-domaine, ex. `api.tondomaine.com`) dont l'enregistrement DNS **A** pointe vers l'IP publique du VPS. Vérifie que la propagation DNS est faite (`dig +short api.tondomaine.com`) avant de lancer Caddy, sinon la génération du certificat HTTPS échouera.
+- Un nom de domaine dont l'enregistrement DNS **A** pointe vers l'IP publique du VPS. Vérifie que la propagation DNS est faite (`dig +short tondomaine.com`) avant de lancer Caddy, sinon la génération du certificat HTTPS échouera.
+- Les deux dépôts clonés en dossiers **frères** (`docker-compose.prod.yml` référence le frontend via `../goungu-your-launchpad`) :
+  ```
+  ~/goungue/goungu-backend/
+  ~/goungue/goungu-your-launchpad/
+  ```
 
 ## 1. Installer Docker sur le VPS
 
@@ -28,14 +36,18 @@ sudo ufw enable
 
 ## 3. Récupérer le code sur le serveur
 
+Cloner les deux dépôts côte à côte :
+
 ```bash
-git clone <url-de-ton-depot> goungue-backend
-cd goungue-backend
+mkdir -p ~/goungue && cd ~/goungue
+git clone <url-du-depot-backend> goungu-backend
+git clone <url-du-depot-frontend> goungu-your-launchpad
+cd goungu-backend
 ```
 
 ## 4. Configurer les secrets
 
-**Jamais via Git.** Directement sur le serveur :
+**Jamais via Git.** Directement sur le serveur, dans `goungu-backend/` :
 
 ```bash
 cp .env.example .env
@@ -46,8 +58,8 @@ Remplir :
 - `DB_PASSWORD` — un mot de passe fort pour MySQL
 - `JWT_SECRET` — générer avec `openssl rand -base64 32`
 - `SETUP_SECRET_KEY` — générer avec `openssl rand -base64 32` (différente du JWT_SECRET)
-- `CORS_ALLOWED_ORIGINS` — l'URL de ton frontend en prod (ex. `https://tondomaine.com`)
-- `DOMAIN` — le domaine de l'API elle-même (ex. `api.tondomaine.com`)
+- `DOMAIN` — le domaine du site (ex. `tondomaine.com`), sert à la fois au frontend et à l'API via `/api`
+- `CORS_ALLOWED_ORIGINS` — laisser la valeur par défaut ; n'a plus d'effet en production mono-domaine, seulement utile en dev local (frontend et backend sur des ports différents)
 
 ## 5. Lancer la stack
 
@@ -55,24 +67,27 @@ Remplir :
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Ça démarre `db` (MySQL), `app` (l'API, non exposée sur l'hôte) et `caddy` (reverse proxy, obtient et renouvelle le certificat Let's Encrypt automatiquement au premier accès).
+Ça démarre `db` (MySQL), `app` (l'API), `frontend` (le build Vite servi par un Caddy interne) — aucun des trois n'est exposé sur l'hôte — et `caddy` (reverse proxy public, obtient et renouvelle le certificat Let's Encrypt automatiquement au premier accès).
 
 Vérifier :
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f caddy
-curl -I https://ton-domaine.com/api/programmes
+curl -I https://tondomaine.com/            # doit servir le frontend
+curl -I https://tondomaine.com/api/programmes   # doit répondre depuis le backend
 ```
 
 ## 6. Créer le premier compte admin
 
 ```bash
-curl -X POST "https://ton-domaine.com/api/setup/create-admin" \
+curl -X POST "https://tondomaine.com/api/setup/create-admin" \
   --data-urlencode "email=toi@exemple.com" \
   --data-urlencode "motDePasse=un-mot-de-passe-fort" \
   --data-urlencode "cleSecrete=<la valeur de SETUP_SECRET_KEY dans ton .env>"
 ```
 
 Une fois cet admin créé, désactive l'accès à `/api/setup/create-admin` (retire la règle `permitAll` correspondante dans `SecurityConfig.java` et redéploie) — il n'a plus de raison d'être exposé.
+
+Ce compte (table `Admin`) peut se connecter sur `/api/auth/login` et gérer articles, programmes, images et messages de contact. Pour accéder à la console `/espace/admin` du frontend (utilisateurs, candidatures, ressources, événements), il doit en plus promouvoir un compte inscrit normalement (`/api/utilisateurs/inscription`) au rôle admin via `PUT /api/utilisateurs/{id}/role` — c'est la seule façon de faire exister le premier admin de ce second système.
 
 ## 7. Sauvegardes de la base
 

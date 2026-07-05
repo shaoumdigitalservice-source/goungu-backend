@@ -1,15 +1,29 @@
 # À utiliser uniquement sur le VPS, en plus du fichier de base :
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
-# Ajoute Caddy comme reverse proxy avec HTTPS automatique (Let's Encrypt).
-# L'app n'est volontairement PAS publiée sur l'hôte ici : seul Caddy expose 80/443,
-# tout le trafic vers l'app passe par lui.
+# Ajoute Caddy comme reverse proxy avec HTTPS automatique (Let's Encrypt), et le
+# frontend statique. Un seul domaine : Caddy route par chemin (voir Caddyfile) —
+# /api et /uploads vers l'app, le reste vers le frontend. Ni l'app ni le frontend
+# ne sont publiés directement sur l'hôte : seul Caddy expose 80/443.
+#
+# Suppose que goungu-your-launchpad est cloné en dossier frère de ce dépôt
+# (ex. ~/goungue/goungu-backend et ~/goungue/goungu-your-launchpad).
 services:
+  frontend:
+    build:
+      context: ../goungu-your-launchpad
+      args:
+        # Vide = même origine que la page (proxy de chemin ci-dessus). Ne mettre
+        # une URL complète que pour un déploiement multi-domaines.
+        VITE_API_URL: ""
+    restart: unless-stopped
+
   caddy:
     image: caddy:2
     restart: unless-stopped
     depends_on:
       - app
+      - frontend
     ports:
       - "80:80"
       - "443:443"
