@@ -1,14 +1,18 @@
 # À utiliser à la place de docker-compose.prod.yml sur un VPS mutualisé où un Caddy
-# d'un autre projet occupe déjà les ports 80/443 :
-#   EXTERNAL_CADDY_NETWORK=<reseau> docker compose -f docker-compose.yml -f docker-compose.shared-caddy.yml up -d --build
+# central (dédié, hors de tout projet applicatif) occupe déjà les ports 80/443 :
+#   docker compose -f docker-compose.yml -f docker-compose.shared-caddy.yml up -d --build
 #
 # Ne lance PAS de Caddy ici : app et frontend rejoignent en plus le réseau Docker
-# externe de l'autre projet (ex. "shaolin_web", cree par son propre docker-compose.yml)
-# avec des alias stables ("goungu-app", "goungu-frontend"), pour que son Caddy
-# puisse les atteindre par ces noms et leur ajouter un bloc de site dans son Caddyfile.
+# externe partagé (par défaut "edge") avec des alias stables ("goungu-app",
+# "goungu-frontend"), pour que ce Caddy central puisse les atteindre par ces noms
+# et leur ajouter un bloc de site (voir sites/*.caddy de ce Caddy central).
 #
-# EXTERNAL_CADDY_NETWORK doit correspondre a un reseau Docker existant (docker network ls) :
-# generalement "<nom-du-dossier-du-projet-existant>_<nom-du-reseau-dans-son-compose>".
+# IMPORTANT : si EXTERNAL_CADDY_NETWORK n'est pas défini (ligne de commande ou
+# .env), la valeur par défaut ci-dessous est utilisée silencieusement — un simple
+# "docker compose ... up -d --build" sans la variable dans le .env recréerait le
+# conteneur sur le mauvais réseau et le rendrait injoignable (502 côté Caddy).
+# Le plus sûr est de mettre EXTERNAL_CADDY_NETWORK=edge dans le .env une bonne
+# fois pour toutes plutôt que de compter sur la ligne de commande à chaque fois.
 services:
   app:
     networks:
@@ -33,4 +37,4 @@ services:
 networks:
   shared_caddy:
     external: true
-    name: ${EXTERNAL_CADDY_NETWORK:-shaolin_web}
+    name: ${EXTERNAL_CADDY_NETWORK:-edge}

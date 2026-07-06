@@ -78,21 +78,61 @@ curl -I https://tondomaine.com/            # doit servir le frontend
 curl -I https://tondomaine.com/api/programmes   # doit répondre depuis le backend
 ```
 
-**Cas B — VPS mutualisé, un autre projet occupe déjà 80/443 avec son propre Caddy.**
-Ne pas utiliser `docker-compose.prod.yml` (son service `caddy` entrerait en conflit de port).
-À la place :
+**Cas B — VPS mutualisé, hébergeant (ou destiné à héberger) plusieurs projets.**
+Ne pas utiliser `docker-compose.prod.yml` (son service `caddy` publierait 80/443 et entrerait
+en conflit avec tout autre Caddy). À la place, un **Caddy central dédié**, qui n'appartient à
+aucun projet applicatif, est seul propriétaire de 80/443 :
 
+```
+~/infra/caddy/
+  docker-compose.yml   # le seul service à publier 80/443
+  Caddyfile             # une seule ligne : import sites/*.caddy
+  sites/
+    <projet-1>.caddy    # un fichier par projet, aucun a toucher a celui des autres
+    <projet-2>.caddy
+```
+
+`docker-compose.yml` de ce Caddy central :
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+networks:
+  edge:
+    external: true
+    name: edge
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+Le réseau `edge` doit exister avant de démarrer quoi que ce soit (`docker network create edge`),
+créé une seule fois, manuellement — aucun des projets ne le "possède", ils le rejoignent tous en externe.
+
+Ajouter `EXTERNAL_CADDY_NETWORK=edge` dans le `.env` de **goungu-backend** (déjà présent dans
+`.env.example`), puis :
 ```bash
-docker network ls   # repère le nom du reseau externe du Caddy existant (ex. shaolin_web)
-
-EXTERNAL_CADDY_NETWORK=<reseau-existant> \
 docker compose -f docker-compose.yml -f docker-compose.shared-caddy.yml up -d --build
 ```
 
-Ça démarre `db` et `app`, plus `frontend` (défini dans ce fichier, pas dans `docker-compose.prod.yml`) — sans lancer de second Caddy. `app` et `frontend` rejoignent en plus le réseau externe sous les alias `goungu-app` et `goungu-frontend`, atteignables par nom depuis n'importe quel conteneur de ce réseau, y compris le Caddy de l'autre projet.
+Ça démarre `db` et `app`, plus `frontend` (défini dans ce fichier, pas dans `docker-compose.prod.yml`) —
+sans lancer de second Caddy. `app` et `frontend` rejoignent en plus `edge` sous les alias `goungu-app`
+et `goungu-frontend`, atteignables par nom depuis le Caddy central.
 
-Ajoute ensuite un bloc dans le `Caddyfile` **de l'autre projet** (celui qui possède déjà 80/443) :
-
+`sites/goungu.caddy` (dans `~/infra/caddy/`) :
 ```caddyfile
 tondomaine.com, www.tondomaine.com {
 	handle /api/* {
@@ -107,10 +147,16 @@ tondomaine.com, www.tondomaine.com {
 }
 ```
 
-Puis recharge son Caddy sans coupure (depuis le dossier de cet autre projet) :
+Puis recharge le Caddy central sans coupure (depuis `~/infra/caddy/`) :
 ```bash
 docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
+
+**Piège vécu :** si `EXTERNAL_CADDY_NETWORK` n'est pas dans le `.env`, un simple
+`docker compose ... up -d --build` (sans le préfixer sur la ligne de commande) retombe sur la
+valeur par défaut du fichier et peut reconnecter les conteneurs au mauvais réseau — le Caddy
+central ne les retrouve plus (502) jusqu'au prochain redéploiement avec la bonne variable.
+Mettre `EXTERNAL_CADDY_NETWORK=edge` dans le `.env` une bonne fois pour toutes évite ce piège.
 
 ## 6. Créer le premier compte admin
 
