@@ -63,6 +63,8 @@ Remplir :
 
 ## 5. Lancer la stack
 
+**Cas A — VPS dédié à ce seul projet** (rien d'autre n'écoute sur 80/443) :
+
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
@@ -74,6 +76,40 @@ Vérifier :
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f caddy
 curl -I https://tondomaine.com/            # doit servir le frontend
 curl -I https://tondomaine.com/api/programmes   # doit répondre depuis le backend
+```
+
+**Cas B — VPS mutualisé, un autre projet occupe déjà 80/443 avec son propre Caddy.**
+Ne pas utiliser `docker-compose.prod.yml` (son service `caddy` entrerait en conflit de port).
+À la place :
+
+```bash
+docker network ls   # repère le nom du reseau externe du Caddy existant (ex. shaolin_web)
+
+EXTERNAL_CADDY_NETWORK=<reseau-existant> \
+docker compose -f docker-compose.yml -f docker-compose.shared-caddy.yml up -d --build
+```
+
+Ça démarre `db` et `app`, plus `frontend` (défini dans ce fichier, pas dans `docker-compose.prod.yml`) — sans lancer de second Caddy. `app` et `frontend` rejoignent en plus le réseau externe sous les alias `goungu-app` et `goungu-frontend`, atteignables par nom depuis n'importe quel conteneur de ce réseau, y compris le Caddy de l'autre projet.
+
+Ajoute ensuite un bloc dans le `Caddyfile` **de l'autre projet** (celui qui possède déjà 80/443) :
+
+```caddyfile
+tondomaine.com, www.tondomaine.com {
+	handle /api/* {
+		reverse_proxy goungu-app:8082
+	}
+	handle /uploads/* {
+		reverse_proxy goungu-app:8082
+	}
+	handle {
+		reverse_proxy goungu-frontend:80
+	}
+}
+```
+
+Puis recharge son Caddy sans coupure (depuis le dossier de cet autre projet) :
+```bash
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
 ## 6. Créer le premier compte admin

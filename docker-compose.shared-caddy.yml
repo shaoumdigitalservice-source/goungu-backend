@@ -1,0 +1,36 @@
+# À utiliser à la place de docker-compose.prod.yml sur un VPS mutualisé où un Caddy
+# d'un autre projet occupe déjà les ports 80/443 :
+#   EXTERNAL_CADDY_NETWORK=<reseau> docker compose -f docker-compose.yml -f docker-compose.shared-caddy.yml up -d --build
+#
+# Ne lance PAS de Caddy ici : app et frontend rejoignent en plus le réseau Docker
+# externe de l'autre projet (ex. "shaolin_web", cree par son propre docker-compose.yml)
+# avec des alias stables ("goungu-app", "goungu-frontend"), pour que son Caddy
+# puisse les atteindre par ces noms et leur ajouter un bloc de site dans son Caddyfile.
+#
+# EXTERNAL_CADDY_NETWORK doit correspondre a un reseau Docker existant (docker network ls) :
+# generalement "<nom-du-dossier-du-projet-existant>_<nom-du-reseau-dans-son-compose>".
+services:
+  app:
+    networks:
+      default:
+      shared_caddy:
+        aliases:
+          - goungu-app
+
+  frontend:
+    build:
+      context: ../goungu-your-launchpad
+      args:
+        # Vide = même origine que la page servie par le Caddy partagé.
+        VITE_API_URL: ""
+    restart: unless-stopped
+    networks:
+      default:
+      shared_caddy:
+        aliases:
+          - goungu-frontend
+
+networks:
+  shared_caddy:
+    external: true
+    name: ${EXTERNAL_CADDY_NETWORK:-shaolin_web}
