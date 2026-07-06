@@ -121,7 +121,7 @@ curl -X POST "https://tondomaine.com/api/setup/create-admin" \
   --data-urlencode "cleSecrete=<la valeur de SETUP_SECRET_KEY dans ton .env>"
 ```
 
-Une fois cet admin créé, désactive l'accès à `/api/setup/create-admin` (retire la règle `permitAll` correspondante dans `SecurityConfig.java` et redéploie) — il n'a plus de raison d'être exposé.
+Une fois cet admin créé, ferme cet endpoint : passe `SETUP_ENABLED=false` dans le `.env` du serveur, puis redéploie l'app (`docker compose ... up -d --build app`). `POST /api/setup/create-admin` renverra alors `404` quel que soit l'appelant. Remettre `SETUP_ENABLED=true` (ou l'omettre) suffit à le rouvrir si besoin sur un nouvel environnement.
 
 Ce compte (table `Admin`) peut se connecter sur `/api/auth/login` et gérer articles, programmes, images et messages de contact. Pour accéder à la console `/espace/admin` du frontend (utilisateurs, candidatures, ressources, événements), il doit en plus promouvoir un compte inscrit normalement (`/api/utilisateurs/inscription`) au rôle admin via `PUT /api/utilisateurs/{id}/role` — c'est la seule façon de faire exister le premier admin de ce second système.
 
